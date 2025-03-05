@@ -26,7 +26,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// 启动代理服务器
-		proxy.StartProxy(hostsFile, listenAddr)
+		// proxy.StartProxy(hostsFile, listenAddr)
 	},
 }
 
