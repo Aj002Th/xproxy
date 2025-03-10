@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/Aj002Th/xproxy/internal/proxy"
+	"github.com/Aj002Th/xproxy/internal/core"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +26,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// 启动代理服务器
-		// proxy.StartProxy(hostsFile, listenAddr)
+		core.StartProxy(hostsFile, listenAddr)
 	},
 }
 
