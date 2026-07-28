@@ -55,22 +55,3 @@ func HandleHTTPSRequest(clientConn net.Conn, hosts map[string]string, targetHost
 	}()
 	io.Copy(clientConn, serverConn)
 }
-
-type rewindReader struct {
-	prefix    string
-	backend   io.Reader
-	prefixOff int
-}
-
-func (r *rewindReader) Read(p []byte) (int, error) {
-	if r.prefixOff < len(r.prefix) {
-		n := copy(p, r.prefix[r.prefixOff:])
-		r.prefixOff += n
-		return n, nil
-	}
-	return r.backend.Read(p)
-}
-
-func RewindReader(r io.Reader, prefix string) io.Reader {
-	return &rewindReader{prefix: prefix, backend: r}
-}

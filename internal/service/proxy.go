@@ -26,12 +26,14 @@ func StartProxy(hostsFile, listenAddr string) {
 	defer listener.Close()
 	Logger.Info("proxy listening", "addr", listenAddr)
 
+	done := make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-sigCh
 		Logger.Info("shutting down")
+		close(done)
 		listener.Close()
 	}()
 
@@ -39,7 +41,7 @@ func StartProxy(hostsFile, listenAddr string) {
 		conn, err := listener.Accept()
 		if err != nil {
 			select {
-			case <-sigCh:
+			case <-done:
 				return
 			default:
 				Logger.Warn("accept failed", "err", err)
@@ -84,4 +86,23 @@ type readWriteConn struct {
 
 func (r *readWriteConn) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
+}
+
+type rewindReader struct {
+	prefix    string
+	backend   io.Reader
+	prefixOff int
+}
+
+func (r *rewindReader) Read(p []byte) (int, error) {
+	if r.prefixOff < len(r.prefix) {
+		n := copy(p, r.prefix[r.prefixOff:])
+		r.prefixOff += n
+		return n, nil
+	}
+	return r.backend.Read(p)
+}
+
+func RewindReader(r io.Reader, prefix string) io.Reader {
+	return &rewindReader{prefix: prefix, backend: r}
 }

@@ -45,6 +45,9 @@ func HandleHTTPRequest(clientConn net.Conn, hosts map[string]string) {
 	req.URL.Scheme = ""
 	req.URL.Host = ""
 	req.Host = hostname
+	if port != "80" {
+		req.Host = net.JoinHostPort(hostname, port)
+	}
 
 	req = req.WithContext(ctx)
 

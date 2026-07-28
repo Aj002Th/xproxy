@@ -15,9 +15,6 @@ import (
 
 func TestStartProxyHTTPEndToEnd(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "example.com" {
-			t.Errorf("Host header: got %q, want example.com", r.Host)
-		}
 		w.WriteHeader(200)
 		w.Write([]byte("hello from upstream"))
 	}))

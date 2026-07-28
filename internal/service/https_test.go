@@ -100,7 +100,7 @@ func TestHandleHTTPSRequestTunnel(t *testing.T) {
 	clientConn.Close()
 }
 
-func TestHandleHTTPSRequestWithoutPort(t *testing.T) {
+func TestHandleHTTPSRequestUnreachable(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()

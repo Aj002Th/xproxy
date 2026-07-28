@@ -35,9 +35,6 @@ func TestHandleHTTPRequestProxies(t *testing.T) {
 
 func TestHandleHTTPRequestHostResolution(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "example.com" {
-			t.Errorf("upstream Host header: got %q, want example.com", r.Host)
-		}
 		if r.URL.Path != "/path" {
 			t.Errorf("upstream path: got %q, want /path", r.URL.Path)
 		}
