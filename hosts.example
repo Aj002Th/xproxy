@@ -1,0 +1,9 @@
+# Example hosts file for xproxy
+# Format: <IP> <domain1> [domain2 ...]
+# Copy this file and customize for your environment:
+#   cp hosts.example my-hosts
+#   make build
+#   ./xproxy --hosts my-hosts --listen 127.0.0.1:8888
+
+# 127.0.0.1 localhost
+# 192.168.1.100 api.example.com
