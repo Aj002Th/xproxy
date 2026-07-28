@@ -22,15 +22,18 @@ func WriteProxyError(conn net.Conn, statusCode int, msg string) {
 	}
 	resp.Header.Set("Content-Type", "text/plain")
 	resp.Header.Set("Connection", "close")
-	resp.Body = http.NoBody
-	resp.ContentLength = 0
 
 	if msg != "" {
-		resp.Header.Set("X-Proxy-Error", msg)
 		resp.Body = &errorBody{msg: msg}
 		resp.ContentLength = int64(len(msg))
+	} else {
+		resp.Body = http.NoBody
+		resp.ContentLength = 0
 	}
-	resp.Write(conn)
+
+	if err := resp.Write(conn); err != nil {
+		Logger.Warn("failed to write proxy error response", "err", err)
+	}
 }
 
 type errorBody struct {

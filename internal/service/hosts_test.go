@@ -3,6 +3,7 @@ package proxy
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,22 @@ func TestLoadHostsIPv6(t *testing.T) {
 	}
 	if hosts["ipv6.example.com"] != "2001:db8::1" {
 		t.Errorf("ipv6.example.com: got %q, want 2001:db8::1", hosts["ipv6.example.com"])
+	}
+}
+
+func TestLoadHostsScannerError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("127.0.0.1 ")
+	f.WriteString(strings.Repeat("x", 65537))
+	f.Close()
+
+	_, err = LoadHosts(path)
+	if err == nil {
+		t.Error("expected scanner error for long line")
 	}
 }

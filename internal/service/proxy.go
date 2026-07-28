@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 func StartProxy(hostsFile, listenAddr string) {
@@ -23,11 +26,25 @@ func StartProxy(hostsFile, listenAddr string) {
 	defer listener.Close()
 	Logger.Info("proxy listening", "addr", listenAddr)
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigCh
+		Logger.Info("shutting down")
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			Logger.Warn("accept failed", "err", err)
-			continue
+			select {
+			case <-sigCh:
+				return
+			default:
+				Logger.Warn("accept failed", "err", err)
+				continue
+			}
 		}
 		go handleClient(conn, hosts)
 	}
@@ -55,7 +72,7 @@ func handleClient(clientConn net.Conn, hosts map[string]string) {
 	if method == "CONNECT" {
 		HandleHTTPSRequest(clientConn, hosts, target)
 	} else {
-		rewound := RewindReader(reader, firstLine+"\n")
+		rewound := RewindReader(reader, firstLine+"\r\n")
 		HandleHTTPRequest(&readWriteConn{Conn: clientConn, reader: rewound}, hosts)
 	}
 }

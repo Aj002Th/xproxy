@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,10 +12,6 @@ import (
 	"testing"
 	"time"
 )
-
-func init() {
-	Logger = slog.Default()
-}
 
 func TestStartProxyHTTPEndToEnd(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,3 +61,47 @@ func TestStartProxyHTTPEndToEnd(t *testing.T) {
 	}
 }
 
+func TestStartProxyHostsNotFound(t *testing.T) {
+	StartProxy("/nonexistent/hosts", "127.0.0.1:0")
+}
+
+func TestStartProxyBindFailure(t *testing.T) {
+	StartProxy("/etc/hosts", "invalid:addr:99999")
+}
+
+func TestHandleClientConnectDispatches(t *testing.T) {
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start upstream: %v", err)
+	}
+	defer upstream.Close()
+
+	go func() {
+		conn, err := upstream.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		io.Copy(conn, conn)
+	}()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	hosts := map[string]string{"example.com": "127.0.0.1"}
+	upstreamHost := upstream.Addr().String()
+
+	go handleClient(serverConn, hosts)
+	clientConn.Write([]byte(fmt.Sprintf("CONNECT %s HTTP/1.1\r\n\r\n", upstreamHost)))
+
+	resp, err := http.ReadResponse(bufio.NewReader(clientConn), nil)
+	if err != nil {
+		t.Fatalf("failed to read CONNECT response: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200 Connection Established, got %d", resp.StatusCode)
+	}
+	clientConn.Close()
+}
