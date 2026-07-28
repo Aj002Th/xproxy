@@ -2,37 +2,52 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
-	"runtime"
+	"strings"
 
-	"github.com/Aj002Th/xproxy/internal/core"
+	"github.com/Aj002Th/xproxy/internal/service"
 	"github.com/spf13/cobra"
 )
 
 var (
 	hostsFile  string
 	listenAddr string
+	logLevel   string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "xproxy",
-	Short: "A cross-platform transparent proxy server",
-	Long:  `A transparent proxy server that forwards HTTP/HTTPS traffic based on rules in a hosts file.`,
+	Short: "A hosts-based HTTP/HTTPS proxy server",
+	Long:  `xproxy reads a hosts file and exposes an HTTP/HTTPS proxy. Configure your browser or Postman to use this proxy, and domains in the hosts file will be resolved to their mapped IPs without modifying the system hosts file.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// 检查平台兼容性
-		if runtime.GOOS == "windows" {
-			log.Println("Warning: Transparent proxy is not fully supported on Windows.")
-		}
-
-		// 启动代理服务器
-		core.StartProxy(hostsFile, listenAddr)
+		level := parseLogLevel(logLevel)
+		proxy.SetupLogger(level)
+		proxy.Logger.Info("starting xproxy", "hosts", hostsFile, "listen", listenAddr)
+		proxy.StartProxy(hostsFile, listenAddr)
 	},
 }
 
+func parseLogLevel(s string) slog.Level {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		fmt.Fprintf(os.Stderr, "unknown log level %q, using info\n", s)
+		return slog.LevelInfo
+	}
+}
+
 func init() {
-	rootCmd.Flags().StringVar(&hostsFile, "hosts", "/etc/hosts", "Path to the hosts file")
-	rootCmd.Flags().StringVar(&listenAddr, "listen", "0.0.0.0:8888", "Address and port to listen on")
+	rootCmd.Flags().StringVar(&hostsFile, "hosts", "/etc/hosts", "path to hosts file")
+	rootCmd.Flags().StringVar(&listenAddr, "listen", "0.0.0.0:8888", "address and port to listen on")
+	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level: debug, info, warn, error")
 }
 
 func Execute() {
