@@ -47,3 +47,27 @@ func TestWriteProxyError(t *testing.T) {
 		t.Errorf("status text = %q, want Bad Gateway", resp.Status)
 	}
 }
+
+func TestWriteProxyErrorEmptyMsg(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	go func() {
+		WriteProxyError(server, http.StatusServiceUnavailable, "")
+		server.Close()
+	}()
+
+	resp, err := http.ReadResponse(bufio.NewReader(client), nil)
+	if err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+	if resp.ContentLength != 0 {
+		t.Errorf("empty msg should have content-length 0, got %d", resp.ContentLength)
+	}
+}

@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 func StartProxy(hostsFile, listenAddr string) {
@@ -23,11 +26,27 @@ func StartProxy(hostsFile, listenAddr string) {
 	defer listener.Close()
 	Logger.Info("proxy listening", "addr", listenAddr)
 
+	done := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigCh
+		Logger.Info("shutting down")
+		close(done)
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			Logger.Warn("accept failed", "err", err)
-			continue
+			select {
+			case <-done:
+				return
+			default:
+				Logger.Warn("accept failed", "err", err)
+				continue
+			}
 		}
 		go handleClient(conn, hosts)
 	}
@@ -55,7 +74,7 @@ func handleClient(clientConn net.Conn, hosts map[string]string) {
 	if method == "CONNECT" {
 		HandleHTTPSRequest(clientConn, hosts, target)
 	} else {
-		rewound := RewindReader(reader, firstLine+"\n")
+		rewound := RewindReader(reader, firstLine+"\r\n")
 		HandleHTTPRequest(&readWriteConn{Conn: clientConn, reader: rewound}, hosts)
 	}
 }
@@ -67,4 +86,23 @@ type readWriteConn struct {
 
 func (r *readWriteConn) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
+}
+
+type rewindReader struct {
+	prefix    string
+	backend   io.Reader
+	prefixOff int
+}
+
+func (r *rewindReader) Read(p []byte) (int, error) {
+	if r.prefixOff < len(r.prefix) {
+		n := copy(p, r.prefix[r.prefixOff:])
+		r.prefixOff += n
+		return n, nil
+	}
+	return r.backend.Read(p)
+}
+
+func RewindReader(r io.Reader, prefix string) io.Reader {
+	return &rewindReader{prefix: prefix, backend: r}
 }

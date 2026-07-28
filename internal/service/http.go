@@ -5,6 +5,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"time"
 )
 
 func HandleHTTPRequest(clientConn net.Conn, hosts map[string]string) {
@@ -32,7 +33,7 @@ func HandleHTTPRequest(clientConn net.Conn, hosts map[string]string) {
 		Logger.Info("host resolved", "domain", hostname, "ip", ip)
 	}
 
-	serverConn, err := net.Dial("tcp", targetHost)
+	serverConn, err := net.DialTimeout("tcp", targetHost, 30*time.Second)
 	if err != nil {
 		Logger.Warn("upstream unreachable", "target", targetHost, "err", err)
 		WriteProxyError(clientConn, http.StatusBadGateway, err.Error())
@@ -44,6 +45,9 @@ func HandleHTTPRequest(clientConn net.Conn, hosts map[string]string) {
 	req.URL.Scheme = ""
 	req.URL.Host = ""
 	req.Host = hostname
+	if port != "80" {
+		req.Host = net.JoinHostPort(hostname, port)
+	}
 
 	req = req.WithContext(ctx)
 
