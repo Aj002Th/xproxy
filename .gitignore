@@ -5,6 +5,12 @@
 *.exe
 xproxy
 
+# goreleaser artifacts
+dist/
+
+# test artifacts
+coverage.out
+
 go.sum
 
 # superpowers artifacts

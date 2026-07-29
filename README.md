@@ -137,6 +137,29 @@ Requires Go 1.23+.
 | `fmt` | Format source code |
 | `tidy` | Tidy go modules |
 | `smoke` | Quick smoke test |
+| `snapshot` | Build release packages locally (no publish) |
+| `release` | Publish release via GoReleaser (CI uses tag push instead) |
+
+## Releasing
+
+This project uses [GoReleaser](https://goreleaser.com/) to build and publish releases.
+
+**Local test (no publish):**
+
+```bash
+make snapshot
+```
+
+This builds packages for all platforms into `dist/`.
+
+**Publishing a release:**
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Pushing a tag triggers the GitHub Actions workflow (`.github/workflows/release.yml`), which runs GoReleaser to build packages and create a GitHub Release with binaries for linux, darwin, and windows on amd64 and arm64.
 
 ## License
 

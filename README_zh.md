@@ -137,6 +137,29 @@ make build
 | `fmt` | 格式化源代码 |
 | `tidy` | 整理 go 模块依赖 |
 | `smoke` | 快速冒烟测试 |
+| `snapshot` | 本地构建发布包（不发布） |
+| `release` | 通过 GoReleaser 发布（CI 用 tag push 触发） |
+
+## 发布
+
+本项目使用 [GoReleaser](https://goreleaser.com/) 构建和发布。
+
+**本地测试（不发布）：**
+
+```bash
+make snapshot
+```
+
+会在 `dist/` 目录下生成所有平台的构建包。
+
+**正式发布：**
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+推送 tag 会触发 GitHub Actions 工作流（`.github/workflows/release.yml`），自动运行 GoReleaser 构建 linux、darwin、windows 的 amd64/arm64 二进制包，并创建 GitHub Release。
 
 ## License
 

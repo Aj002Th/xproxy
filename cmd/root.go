@@ -14,12 +14,14 @@ var (
 	hostsFile  string
 	listenAddr string
 	logLevel   string
+	version    string
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "xproxy",
-	Short: "A hosts-based HTTP/HTTPS proxy server",
-	Long:  `xproxy reads a hosts file and exposes an HTTP/HTTPS proxy. Configure your browser or Postman to use this proxy, and domains in the hosts file will be resolved to their mapped IPs without modifying the system hosts file.`,
+	Use:     "xproxy",
+	Short:   "A hosts-based HTTP/HTTPS proxy server",
+	Long:    `xproxy reads a hosts file and exposes an HTTP/HTTPS proxy. Configure your browser or Postman to use this proxy, and domains in the hosts file will be resolved to their mapped IPs without modifying the system hosts file.`,
+	Version: version,
 	Run: func(cmd *cobra.Command, args []string) {
 		level := parseLogLevel(logLevel)
 		proxy.SetupLogger(level)
