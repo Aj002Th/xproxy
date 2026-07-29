@@ -11,7 +11,5 @@ dist/
 # test artifacts
 coverage.out
 
-go.sum
-
 # superpowers artifacts
 docs/superpowers/
