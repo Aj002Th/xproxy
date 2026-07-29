@@ -1,4 +1,4 @@
-.PHONY: build test test-cover vet clean run install fmt tidy smoke
+.PHONY: build test test-cover vet clean run install fmt tidy smoke snapshot release
 
 BINARY := xproxy
 
@@ -17,6 +17,7 @@ vet:
 
 clean:
 	rm -f $(BINARY) coverage.out
+	rm -rf dist/
 
 run: build
 	./$(BINARY) --hosts ./hosts.example --listen 127.0.0.1:8888 --log-level info
@@ -47,3 +48,11 @@ smoke: build
 		kill $$(lsof -t -i :19999) 2>/dev/null || true; \
 		kill $$(lsof -t -i :19998) 2>/dev/null || true; \
 		rm -f /tmp/test-hosts
+
+# goreleaser: local snapshot (does not publish)
+snapshot:
+	goreleaser release --snapshot --clean
+
+# goreleaser: publish release (triggered by CI, use tag push instead)
+release:
+	goreleaser release --clean
