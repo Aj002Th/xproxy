@@ -32,7 +32,7 @@ func WriteProxyError(conn net.Conn, statusCode int, msg string) {
 	}
 
 	if err := resp.Write(conn); err != nil {
-		Logger.Warn("failed to write proxy error response", "err", err)
+		Logger().Warn("failed to write proxy error response", "err", err)
 	}
 }
 

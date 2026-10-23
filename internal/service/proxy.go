@@ -13,18 +13,18 @@ import (
 func StartProxy(hostsFile, listenAddr string) {
 	hosts, err := LoadHosts(hostsFile)
 	if err != nil {
-		Logger.Error("failed to load hosts file", "path", hostsFile, "err", err)
+		Logger().Error("failed to load hosts file", "path", hostsFile, "err", err)
 		return
 	}
-	Logger.Info("hosts loaded", "entries", len(hosts))
+	Logger().Info("hosts loaded", "entries", len(hosts))
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		Logger.Error("failed to bind listener", "addr", listenAddr, "err", err)
+		Logger().Error("failed to bind listener", "addr", listenAddr, "err", err)
 		return
 	}
 	defer listener.Close()
-	Logger.Info("proxy listening", "addr", listenAddr)
+	Logger().Info("proxy listening", "addr", listenAddr)
 
 	done := make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
@@ -32,7 +32,7 @@ func StartProxy(hostsFile, listenAddr string) {
 
 	go func() {
 		<-sigCh
-		Logger.Info("shutting down")
+		Logger().Info("shutting down")
 		close(done)
 		listener.Close()
 	}()
@@ -44,7 +44,7 @@ func StartProxy(hostsFile, listenAddr string) {
 			case <-done:
 				return
 			default:
-				Logger.Warn("accept failed", "err", err)
+				Logger().Warn("accept failed", "err", err)
 				continue
 			}
 		}
@@ -56,7 +56,7 @@ func handleClient(clientConn net.Conn, hosts map[string]string) {
 	reader := bufio.NewReader(clientConn)
 	firstLine, err := reader.ReadString('\n')
 	if err != nil {
-		Logger.Warn("failed to read request", "err", err)
+		Logger().Warn("failed to read request", "err", err)
 		clientConn.Close()
 		return
 	}
@@ -64,7 +64,7 @@ func handleClient(clientConn net.Conn, hosts map[string]string) {
 
 	parts := strings.SplitN(firstLine, " ", 3)
 	if len(parts) < 2 {
-		Logger.Warn("malformed request line", "line", firstLine)
+		Logger().Warn("malformed request line", "line", firstLine)
 		clientConn.Close()
 		return
 	}

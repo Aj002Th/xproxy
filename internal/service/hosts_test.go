@@ -73,6 +73,79 @@ func TestLoadHostsIPv6(t *testing.T) {
 	}
 }
 
+func TestLoadHostsInlineComments(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	content := "192.168.1.1 api.example.com # production\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	hosts, err := LoadHosts(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hosts["api.example.com"] != "192.168.1.1" {
+		t.Errorf("api.example.com: got %q, want 192.168.1.1", hosts["api.example.com"])
+	}
+	for _, domain := range []string{"#", "production"} {
+		if _, ok := hosts[domain]; ok {
+			t.Errorf("%q should not be parsed as a domain", domain)
+		}
+	}
+}
+
+func TestLoadHostsNormalizesDomains(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	content := "192.168.1.1 API.Example.COM.\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	hosts, err := LoadHosts(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hosts["api.example.com"] != "192.168.1.1" {
+		t.Errorf("normalized lookup: got %q, want 192.168.1.1", hosts["api.example.com"])
+	}
+}
+
+func TestLoadHostsSkipsInvalidIP(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	content := "not-an-ip bad.example.com\n192.168.1.1 good.example.com\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	hosts, err := LoadHosts(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := hosts["bad.example.com"]; ok {
+		t.Error("entry with invalid IP should be skipped")
+	}
+	if hosts["good.example.com"] != "192.168.1.1" {
+		t.Errorf("good.example.com: got %q, want 192.168.1.1", hosts["good.example.com"])
+	}
+}
+
+func TestNormalizeHost(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"Example.COM", "example.com"},
+		{"example.com.", "example.com"},
+		{"  API.Example.Com.  ", "api.example.com"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := normalizeHost(tc.in); got != tc.want {
+			t.Errorf("normalizeHost(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestLoadHostsScannerError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hosts")

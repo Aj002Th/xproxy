@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		level := parseLogLevel(logLevel)
 		proxy.SetupLogger(level)
-		proxy.Logger.Info("starting xproxy", "hosts", hostsFile, "listen", listenAddr)
+		proxy.Logger().Info("starting xproxy", "hosts", hostsFile, "listen", listenAddr)
 		proxy.StartProxy(hostsFile, listenAddr)
 	},
 }
@@ -48,7 +48,7 @@ func parseLogLevel(s string) slog.Level {
 
 func init() {
 	rootCmd.Flags().StringVar(&hostsFile, "hosts", "/etc/hosts", "path to hosts file")
-	rootCmd.Flags().StringVar(&listenAddr, "listen", "0.0.0.0:8888", "address and port to listen on")
+	rootCmd.Flags().StringVar(&listenAddr, "listen", "127.0.0.1:8888", "address and port to listen on")
 	rootCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level: debug, info, warn, error")
 }
 
