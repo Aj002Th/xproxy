@@ -1,67 +1,24 @@
 package proxy
 
 import (
-	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"testing"
+	"time"
 )
 
-func TestRewindReader(t *testing.T) {
-	r := RewindReader(strings.NewReader("body"), "first line\n")
-	data, err := io.ReadAll(r)
+func startEchoServer(t *testing.T) (addr string, port string) {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("listen echo server: %v", err)
 	}
-	got := string(data)
-	want := "first line\nbody"
-	if got != want {
-		t.Errorf("RewindReader: got %q, want %q", got, want)
-	}
-}
-
-func TestRewindReaderPartialReads(t *testing.T) {
-	r := RewindReader(strings.NewReader("world"), "hello ")
-	buf := make([]byte, 3)
-
-	n, err := r.Read(buf)
-	if err != nil {
-		t.Fatalf("read1: %v", err)
-	}
-	if string(buf[:n]) != "hel" {
-		t.Errorf("first read: got %q, want hel", buf[:n])
-	}
-
-	n, err = r.Read(buf)
-	if err != nil {
-		t.Fatalf("read2: %v", err)
-	}
-	if string(buf[:n]) != "lo " {
-		t.Errorf("second read: got %q, want lo ", buf[:n])
-	}
-
-	n, err = r.Read(buf)
-	if err != nil {
-		t.Fatalf("read3: %v", err)
-	}
-	if string(buf[:n]) != "wor" {
-		t.Errorf("third read: got %q, want wor", buf[:n])
-	}
-}
-
-func TestHandleHTTPSRequestTunnel(t *testing.T) {
-	upstream, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to start upstream: %v", err)
-	}
-	defer upstream.Close()
-
-	upstreamHost := upstream.Addr().String()
+	t.Cleanup(func() { l.Close() })
 
 	go func() {
-		conn, err := upstream.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			return
 		}
@@ -69,69 +26,119 @@ func TestHandleHTTPSRequestTunnel(t *testing.T) {
 		io.Copy(conn, conn)
 	}()
 
-	clientConn, serverConn := net.Pipe()
-	defer serverConn.Close()
-
-	hosts := map[string]string{
-		"example.com": "127.0.0.1",
-	}
-
-	go HandleHTTPSRequest(serverConn, hosts, upstreamHost)
-
-	resp, err := http.ReadResponse(bufio.NewReader(clientConn), nil)
+	_, port, err = net.SplitHostPort(l.Addr().String())
 	if err != nil {
-		t.Fatalf("failed to read CONNECT response: %v", err)
+		t.Fatalf("split echo address: %v", err)
 	}
-	if resp.StatusCode != 200 {
-		t.Errorf("expected 200 Connection Established, got %d", resp.StatusCode)
+	return l.Addr().String(), port
+}
+
+func TestHandlerConnectTunnel(t *testing.T) {
+	_, upstreamPort := startEchoServer(t)
+	proxySrv := startProxyHandler(t, map[string]string{"example.com": "127.0.0.1"})
+	conn, br := dialProxy(t, proxySrv)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+
+	fmt.Fprintf(conn, "CONNECT example.com:%s HTTP/1.1\r\nHost: example.com:%s\r\n\r\n", upstreamPort, upstreamPort)
+	if code := readResponseStatus(t, br); code != http.StatusOK {
+		t.Fatalf("CONNECT response: got %d, want 200", code)
 	}
 
 	msg := []byte("hello through tunnel")
-	clientConn.Write(msg)
-
+	if _, err := conn.Write(msg); err != nil {
+		t.Fatalf("write tunnel data: %v", err)
+	}
 	buf := make([]byte, len(msg))
-	_, err = io.ReadFull(clientConn, buf)
-	if err != nil {
-		t.Fatalf("failed to read echoed data: %v", err)
+	if _, err := io.ReadFull(br, buf); err != nil {
+		t.Fatalf("read tunnel data: %v", err)
 	}
 	if string(buf) != string(msg) {
-		t.Errorf("echo: got %q, want %q", string(buf), string(msg))
-	}
-	clientConn.Close()
-}
-
-func TestHandleHTTPSRequestUnreachable(t *testing.T) {
-	clientConn, serverConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	go HandleHTTPSRequest(serverConn, map[string]string{}, "127.0.0.1:19998")
-
-	resp, err := http.ReadResponse(bufio.NewReader(clientConn), nil)
-	if err != nil {
-		t.Fatalf("failed to read response: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 502 {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
+		t.Fatalf("tunnel echo: got %q, want %q", buf, msg)
 	}
 }
 
-func TestHandleHTTPSRequestPortDefaulted(t *testing.T) {
-	clientConn, serverConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
+func TestHandlerConnectPreservesBufferedData(t *testing.T) {
+	_, upstreamPort := startEchoServer(t)
+	proxySrv := startProxyHandler(t, map[string]string{"example.com": "127.0.0.1"})
+	conn, br := dialProxy(t, proxySrv)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
-	go HandleHTTPSRequest(serverConn, map[string]string{"example.com": "127.0.0.1"}, "example.com")
-
-	resp, err := http.ReadResponse(bufio.NewReader(clientConn), nil)
-	if err != nil {
-		t.Fatalf("failed to read response: %v", err)
+	payload := "early-data"
+	request := fmt.Sprintf("CONNECT example.com:%s HTTP/1.1\r\nHost: example.com:%s\r\nProxy-Connection: keep-alive\r\n\r\n%s", upstreamPort, upstreamPort, payload)
+	if _, err := io.WriteString(conn, request); err != nil {
+		t.Fatalf("write CONNECT with early data: %v", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 502 {
-		t.Errorf("expected 502 for port-defaulted connect to closed port, got %d", resp.StatusCode)
+	if code := readResponseStatus(t, br); code != http.StatusOK {
+		t.Fatalf("CONNECT response: got %d, want 200", code)
+	}
+	buf := make([]byte, len(payload))
+	if _, err := io.ReadFull(br, buf); err != nil {
+		t.Fatalf("read early data: %v", err)
+	}
+	if string(buf) != payload {
+		t.Fatalf("early data: got %q, want %q", buf, payload)
+	}
+}
+
+func TestHandlerConnectUnreachable(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	_, closedPort, _ := net.SplitHostPort(l.Addr().String())
+	l.Close()
+
+	proxySrv := startProxyHandler(t, map[string]string{"example.com": "127.0.0.1"})
+	conn, br := dialProxy(t, proxySrv)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+
+	fmt.Fprintf(conn, "CONNECT example.com:%s HTTP/1.1\r\nHost: example.com:%s\r\n\r\n", closedPort, closedPort)
+	if code := readResponseStatus(t, br); code != http.StatusBadGateway {
+		t.Fatalf("CONNECT unreachable: got %d, want 502", code)
+	}
+}
+
+func TestHandlerConnectMissingHost(t *testing.T) {
+	proxySrv := startProxyHandler(t, nil)
+	conn, br := dialProxy(t, proxySrv)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+
+	fmt.Fprint(conn, "CONNECT :443 HTTP/1.1\r\nHost: :443\r\n\r\n")
+	if code := readResponseStatus(t, br); code != http.StatusBadRequest {
+		t.Fatalf("CONNECT missing host: got %d, want 400", code)
+	}
+}
+
+func TestParseConnectTarget(t *testing.T) {
+	tests := []struct {
+		in       string
+		wantHost string
+		wantPort string
+		wantErr  bool
+	}{
+		{"example.com:8443", "example.com", "8443", false},
+		{"example.com", "example.com", "443", false},
+		{"example.com:", "example.com", "443", false},
+		{"[::1]:8443", "::1", "8443", false},
+		{"[::1]", "::1", "443", false},
+		{"::1", "", "", true},
+		{"", "", "", true},
+	}
+	for _, tc := range tests {
+		host, port, err := parseConnectTarget(tc.in)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("parseConnectTarget(%q) expected error, got host=%q port=%q", tc.in, host, port)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseConnectTarget(%q): unexpected error: %v", tc.in, err)
+			continue
+		}
+		if host != tc.wantHost || port != tc.wantPort {
+			t.Errorf("parseConnectTarget(%q) = (%q, %q), want (%q, %q)", tc.in, host, port, tc.wantHost, tc.wantPort)
+		}
 	}
 }

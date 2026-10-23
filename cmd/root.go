@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/Aj002Th/xproxy/internal/service"
 	"github.com/spf13/cobra"
@@ -18,15 +21,21 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "xproxy",
-	Short:   "A hosts-based HTTP/HTTPS proxy server",
-	Long:    `xproxy reads a hosts file and exposes an HTTP/HTTPS proxy. Configure your browser or Postman to use this proxy, and domains in the hosts file will be resolved to their mapped IPs without modifying the system hosts file.`,
-	Version: version,
-	Run: func(cmd *cobra.Command, args []string) {
+	Use:           "xproxy",
+	Short:         "A hosts-based HTTP/HTTPS proxy server",
+	Long:          `xproxy reads a hosts file and exposes an HTTP/HTTPS proxy. Configure your browser or Postman to use this proxy, and domains in the hosts file will be resolved to their mapped IPs without modifying the system hosts file.`,
+	Version:       version,
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		level := parseLogLevel(logLevel)
 		proxy.SetupLogger(level)
 		proxy.Logger().Info("starting xproxy", "hosts", hostsFile, "listen", listenAddr)
-		proxy.StartProxy(hostsFile, listenAddr)
+
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		return proxy.StartProxy(ctx, hostsFile, listenAddr)
 	},
 }
 
@@ -54,7 +63,7 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

@@ -1,108 +1,66 @@
 package proxy
 
 import (
-	"bufio"
-	"io"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
+	"net/http"
+	"time"
 )
 
-func StartProxy(hostsFile, listenAddr string) {
+const (
+	dialTimeout       = 30 * time.Second
+	readHeaderTimeout = 10 * time.Second
+	idleTimeout       = 90 * time.Second
+	maxHeaderBytes    = 64 * 1024
+	shutdownTimeout   = 5 * time.Second
+)
+
+// StartProxy loads the hosts file and serves the proxy until ctx is canceled.
+func StartProxy(ctx context.Context, hostsFile, listenAddr string) error {
 	hosts, err := LoadHosts(hostsFile)
 	if err != nil {
-		Logger().Error("failed to load hosts file", "path", hostsFile, "err", err)
-		return
+		return fmt.Errorf("load hosts %q: %w", hostsFile, err)
 	}
 	Logger().Info("hosts loaded", "entries", len(hosts))
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		Logger().Error("failed to bind listener", "addr", listenAddr, "err", err)
-		return
+		return fmt.Errorf("listen %q: %w", listenAddr, err)
 	}
-	defer listener.Close()
-	Logger().Info("proxy listening", "addr", listenAddr)
+	Logger().Info("proxy listening", "addr", listener.Addr().String())
 
-	done := make(chan struct{})
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	return serve(ctx, listener, hosts)
+}
 
+func serve(ctx context.Context, listener net.Listener, hosts map[string]string) error {
+	srv := &http.Server{
+		Handler:           NewHandler(hosts),
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+		ErrorLog:          slog.NewLogLogger(Logger().Handler(), slog.LevelWarn),
+	}
+
+	errCh := make(chan error, 1)
 	go func() {
-		<-sigCh
-		Logger().Info("shutting down")
-		close(done)
-		listener.Close()
+		errCh <- srv.Serve(listener)
 	}()
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			select {
-			case <-done:
-				return
-			default:
-				Logger().Warn("accept failed", "err", err)
-				continue
-			}
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("shutdown: %w", err)
 		}
-		go handleClient(conn, hosts)
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("serve: %w", err)
 	}
-}
-
-func handleClient(clientConn net.Conn, hosts map[string]string) {
-	reader := bufio.NewReader(clientConn)
-	firstLine, err := reader.ReadString('\n')
-	if err != nil {
-		Logger().Warn("failed to read request", "err", err)
-		clientConn.Close()
-		return
-	}
-	firstLine = strings.TrimRight(firstLine, "\r\n")
-
-	parts := strings.SplitN(firstLine, " ", 3)
-	if len(parts) < 2 {
-		Logger().Warn("malformed request line", "line", firstLine)
-		clientConn.Close()
-		return
-	}
-	method := parts[0]
-	target := parts[1]
-
-	if method == "CONNECT" {
-		HandleHTTPSRequest(clientConn, hosts, target)
-	} else {
-		rewound := RewindReader(reader, firstLine+"\r\n")
-		HandleHTTPRequest(&readWriteConn{Conn: clientConn, reader: rewound}, hosts)
-	}
-}
-
-type readWriteConn struct {
-	net.Conn
-	reader io.Reader
-}
-
-func (r *readWriteConn) Read(p []byte) (int, error) {
-	return r.reader.Read(p)
-}
-
-type rewindReader struct {
-	prefix    string
-	backend   io.Reader
-	prefixOff int
-}
-
-func (r *rewindReader) Read(p []byte) (int, error) {
-	if r.prefixOff < len(r.prefix) {
-		n := copy(p, r.prefix[r.prefixOff:])
-		r.prefixOff += n
-		return n, nil
-	}
-	return r.backend.Read(p)
-}
-
-func RewindReader(r io.Reader, prefix string) io.Reader {
-	return &rewindReader{prefix: prefix, backend: r}
 }
