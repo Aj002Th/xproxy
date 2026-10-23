@@ -62,9 +62,11 @@ xproxy [flags]
 
 Flags:
   --hosts string      自定义 hosts 文件路径 (默认 "/etc/hosts")
-  --listen string     代理监听地址和端口 (默认 "0.0.0.0:8888")
+  --listen string     代理监听地址和端口 (默认 "127.0.0.1:8888")
   --log-level string  日志级别: debug, info, warn, error (默认 "info")
 ```
+
+默认只监听本机。如需局域网访问，显式使用 `--listen 0.0.0.0:8888`；代理本身没有认证。
 
 ## Hosts 文件格式
 
@@ -129,8 +131,12 @@ make build
 |------|------|
 | `build` | 编译二进制文件 |
 | `test` | 运行所有测试 |
+| `race` | 带 race detector 运行所有测试 |
 | `test-cover` | 测试并生成覆盖率报告 |
 | `vet` | 运行 go vet 检查 |
+| `lint` | 运行 staticcheck |
+| `fmt-check` | 检查是否有文件需要 gofmt |
+| `check` | 依次运行 fmt-check、vet、lint、race |
 | `clean` | 删除二进制和覆盖率文件 |
 | `run` | 编译并以示例配置启动 |
 | `install` | 安装到 `$GOPATH/bin` |

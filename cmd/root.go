@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Aj002Th/xproxy/internal/service"
+	"github.com/Aj002Th/xproxy/internal/proxy"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ var (
 	hostsFile  string
 	listenAddr string
 	logLevel   string
-	version    string
+	version    = "dev"
 )
 
 var rootCmd = &cobra.Command{

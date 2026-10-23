@@ -133,6 +133,30 @@ func TestHandlerWithoutHostsHit(t *testing.T) {
 	}
 }
 
+func TestHandlerAcceptsOriginForm(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/foo" {
+			t.Errorf("upstream path: got %q, want /foo", r.URL.Path)
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer backend.Close()
+
+	port := backendPort(t, backend)
+	proxySrv := startProxyHandler(t, map[string]string{"example.com": "127.0.0.1"})
+	conn, br := dialProxy(t, proxySrv)
+
+	fmt.Fprintf(conn, "GET /foo HTTP/1.1\r\nHost: example.com:%s\r\nConnection: close\r\n\r\n", port)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", resp.StatusCode)
+	}
+}
+
 func TestHandlerKeepsConnectionAlive(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -287,6 +311,40 @@ func TestHandlerExpectContinue(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "payload" {
 		t.Fatalf("body: got %q, want payload", body)
+	}
+}
+
+func TestHandlerUpstreamHeaderTimeout(t *testing.T) {
+	old := responseHeaderTimeout
+	responseHeaderTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { responseHeaderTimeout = old })
+
+	backend, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen backend: %v", err)
+	}
+	defer backend.Close()
+
+	go func() {
+		conn, err := backend.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		io.Copy(io.Discard, conn) // consume the request, never respond
+	}()
+
+	_, port, _ := net.SplitHostPort(backend.Addr().String())
+	proxySrv := startProxyHandler(t, map[string]string{"example.com": "127.0.0.1"})
+	client := proxyClient(t, proxySrv)
+
+	resp, err := client.Get("http://example.com:" + port + "/")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status: got %d, want 502", resp.StatusCode)
 	}
 }
 

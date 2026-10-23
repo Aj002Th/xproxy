@@ -51,6 +51,7 @@ func serve(ctx context.Context, listener net.Listener, hosts map[string]string) 
 
 	select {
 	case <-ctx.Done():
+		Logger().Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {

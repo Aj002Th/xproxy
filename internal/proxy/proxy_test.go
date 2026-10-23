@@ -87,6 +87,18 @@ func TestServeHTTPEndToEnd(t *testing.T) {
 	}
 }
 
+func TestServeReturnsErrorOnClosedListener(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	listener.Close()
+
+	if err := serve(context.Background(), listener, nil); err == nil {
+		t.Fatal("expected an error from a closed listener")
+	}
+}
+
 func TestServeGracefulShutdown(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

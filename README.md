@@ -62,9 +62,11 @@ xproxy [flags]
 
 Flags:
   --hosts string      path to hosts file (default "/etc/hosts")
-  --listen string     address and port to listen on (default "0.0.0.0:8888")
+  --listen string     address and port to listen on (default "127.0.0.1:8888")
   --log-level string  log level: debug, info, warn, error (default "info")
 ```
+
+By default xproxy only listens on localhost. Use `--listen 0.0.0.0:8888` to expose it to your network; the proxy has no authentication.
 
 ## Hosts File Format
 
@@ -129,8 +131,12 @@ Requires Go 1.23+.
 |--------|-------------|
 | `build` | Compile binary |
 | `test` | Run all tests |
+| `race` | Run all tests with the race detector |
 | `test-cover` | Tests with coverage report |
 | `vet` | Run go vet |
+| `lint` | Run staticcheck |
+| `fmt-check` | Fail if files need gofmt |
+| `check` | Run fmt-check, vet, lint, and race |
 | `clean` | Remove binary and coverage output |
 | `run` | Build and start with example hosts |
 | `install` | Install to `$GOPATH/bin` |

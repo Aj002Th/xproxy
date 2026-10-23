@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestVersionFlagAvailable(t *testing.T) {
+	if rootCmd.Version == "" {
+		t.Fatal("rootCmd.Version must be non-empty so --version is available")
+	}
+}
+
 func TestFlagDefaults(t *testing.T) {
 	if got := rootCmd.Flags().Lookup("listen").DefValue; got != "127.0.0.1:8888" {
 		t.Errorf("listen default = %q, want 127.0.0.1:8888", got)

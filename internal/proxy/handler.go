@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var responseHeaderTimeout = 60 * time.Second
+
 // NewHandler returns an HTTP handler that proxies absolute-form requests and
 // handles CONNECT tunnels for HTTPS.
 func NewHandler(hosts map[string]string) http.Handler {
@@ -71,5 +73,6 @@ func newTransport(hosts map[string]string) *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: responseHeaderTimeout,
 	}
 }
