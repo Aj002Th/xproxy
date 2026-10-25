@@ -1,5 +1,7 @@
 # xproxy
 
+English | [简体中文](README_zh.md)
+
 A hosts-based HTTP/HTTPS proxy server. Switch domains without touching `/etc/hosts`.
 
 ## Why xproxy
@@ -9,7 +11,7 @@ Tools like [SwitchHosts](https://github.com/oldj/SwitchHosts) modify the system 
 1. **DNS cache lag** — browsers and the OS cache DNS results. After switching hosts, you wait an unpredictable amount of time for changes to take effect (or manually flush caches).
 2. **No per-app isolation** — system hosts changes are global. You can't have one browser use a test environment while another uses production.
 
-xproxy solves both: it exposes an HTTP/HTTPS proxy server that resolves domains using your custom hosts file. Route individual applications through the proxy and switch hosts entries instantly, per app.
+xproxy solves both: it exposes an HTTP/HTTPS proxy server that resolves domains using your custom hosts file. Only apps configured to use the proxy are affected, and edits take effect after restarting xproxy — there is no OS or browser DNS cache to flush. To give different apps different hosts files, run additional instances on other ports.
 
 ## Quick Start
 
